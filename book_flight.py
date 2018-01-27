@@ -9,6 +9,15 @@ import requests
 
 import pprint
 
+USER = {
+	'firstName': 'Chris',
+	'lastName': 'Pratt',
+	'birthday': '1979-06-21',
+	'documentID': '42',
+	'email': 'pratt@yahoo.com',
+	'title': 'Mr'
+}
+
 @click.command()
 @click.option('--date', required=True, help='Date of departure.')
 @click.option('--from', 'f', required=True, help='IATA code from.')
@@ -58,12 +67,19 @@ def getFlight(date, f, t, ret, cheapest, fastest, oneway):
 		typeFlight = 'oneway' if oneway else 'round',
 		sort = 'price' if cheapest else 'duration'
 	)
-	res = requests.get('https://api.skypicker.com/flights', params=params)
-	data = res.json()
-	return None if not data['data'] else data['data'][0]
+	data = requests.get('https://api.skypicker.com/flights', params=params).json()
+	return data['data'][0] if data['data'] else None
 
 def bookFlight(flight, bags):
-	return 0
+	url = 'http://128.199.48.38:8080/booking'
+	data = {
+		'booking_token': flight['booking_token'],
+		'currency': next(iter(flight['conversion'])),
+		'passengers': [USER],
+		'bags': bags if bags else 1
+	}
+	booking = requests.post(url, json=data).json()
+	return booking['pnr']
 
 if __name__ == '__main__':
 	try:
