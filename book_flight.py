@@ -21,6 +21,8 @@ import pprint
 def main(date, f, t, bags, ret, cheapest, fastest, oneway):	
 	date, oneway, cheapest = checkInputs(date, f, t, bags, ret, cheapest, fastest, oneway)
 	flight = getFlight(date, f, t, bags, ret, cheapest, fastest, oneway)
+	if not flight:
+		raise Exception('No flight found!')
 	
 	
 def checkInputs(date, f, t, bags, ret, cheapest, fastest, oneway):
@@ -59,10 +61,11 @@ def getFlight(date, f, t, bags, ret, cheapest, fastest, oneway):
 	#BAGS??
 
 	res = requests.get('https://api.skypicker.com/flights', params=params)
-	print(res.url)
+	#print(res.url)
 	data = json.loads(res.text)
-	print(len(data))
+	flight = next(iter(data['data'] or []), None)
 
+	return flight
 
 if __name__ == '__main__':
 	try:
