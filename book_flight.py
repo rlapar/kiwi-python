@@ -20,9 +20,11 @@ import pprint
 @click.option('--one-way', 'oneway', is_flag=True, help='Book one way ticket')
 def main(date, f, t, bags, ret, cheapest, fastest, oneway):	
 	date, oneway, cheapest = checkInputs(date, f, t, bags, ret, cheapest, fastest, oneway)
-	flight = getFlight(date, f, t, bags, ret, cheapest, fastest, oneway)
+	flight = getFlight(date, f, t, ret, cheapest, fastest, oneway)
 	if not flight:
 		raise Exception('No flight found!')
+	bookId = bookFlight(flight, bags)
+	print(bookId)
 	
 	
 def checkInputs(date, f, t, bags, ret, cheapest, fastest, oneway):
@@ -47,25 +49,21 @@ def checkInputs(date, f, t, bags, ret, cheapest, fastest, oneway):
 
 	return date, oneway, cheapest
 
-def getFlight(date, f, t, bags, ret, cheapest, fastest, oneway):
+def getFlight(date, f, t, ret, cheapest, fastest, oneway):
 	params = dict(
-		dateFrom=date,
-		dateTo=None,
-		flyFrom=f,
-		to=t,
-		typeFlight=None,
-		sort=None
+		dateFrom = date,
+		daysInDestinationFrom = ret if ret else None,
+		flyFrom = f,
+		to = t,
+		typeFlight = 'oneway' if oneway else 'round',
+		sort = 'price' if cheapest else 'duration'
 	)
-	params['typeFlight'] = 'oneway' if oneway else 'round'
-	params['sort'] = 'price' if cheapest else 'duration'
-	#BAGS??
-
 	res = requests.get('https://api.skypicker.com/flights', params=params)
-	#print(res.url)
-	data = json.loads(res.text)
-	flight = next(iter(data['data'] or []), None)
+	data = res.json()
+	return None if not data['data'] else data['data'][0]
 
-	return flight
+def bookFlight(flight, bags):
+	return 0
 
 if __name__ == '__main__':
 	try:
@@ -77,4 +75,5 @@ if __name__ == '__main__':
 
 """
 ADD SETUPTOOLS
+ADD TESTS
 """
