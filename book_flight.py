@@ -7,8 +7,6 @@ import json
 import datefinder
 import requests
 
-import pprint
-
 USER = {
 	'firstName': 'Chris',
 	'lastName': 'Pratt',
@@ -18,6 +16,12 @@ USER = {
 	'title': 'Mr'
 }
 
+class ArgumentException(Exception):
+	pass
+
+class FlightException(Exception):
+	pass
+
 @click.command()
 @click.option('--date', required=True, help='Date of departure.')
 @click.option('--from', 'f', required=True, help='IATA code from.')
@@ -26,39 +30,66 @@ USER = {
 @click.option('--return', 'ret', type=int, help='Nights in destination.')
 @click.option('--cheapest', is_flag=True, help='Book the cheapest flight.')
 @click.option('--fastest', is_flag=True, help='Book the fastest flight.')
-@click.option('--one-way', 'oneway', is_flag=True, help='Book one way ticket')
-def main(date, f, t, bags, ret, cheapest, fastest, oneway):	
-	date, oneway, cheapest = checkInputs(date, f, t, bags, ret, cheapest, fastest, oneway)
-	flight = getFlight(date, f, t, ret, cheapest, fastest, oneway)
-	if not flight:
-		raise Exception('No flight found!')
-	bookId = bookFlight(flight, bags)
-	print(bookId)
+@click.option('--one-way', 'oneway', is_flag=True, help='Book one way ticket.')
+@click.option('--warn / --no-warn', default=True, help='Show warning and error messages.')
+def main(date, f, t, bags, ret, cheapest, fastest, oneway, warn):	
+	try:
+		date, oneway, cheapest = checkInputs(date, f, t, bags, ret, cheapest, fastest, oneway)
+		flight = getFlight(date, f, t, ret, cheapest, fastest, oneway)
+		if not flight:
+			raise FlightException('No flight found!')
+		bookId = bookFlight(flight, bags)
+		print(bookId)
+	except ArgumentException as e:
+		if warn: sys.stderr.write('Input Error: {}\n'.format(str(e)))
+		print(0)
+		sys.exit(1)
+	except FlightException as e:
+		if warn: sys.stderr.write('Booking Error: {}\n'.format(str(e)))
+		print(0)
+		sys.exit(1)
+	except Exception as e:
+		if warn: sys.stderr.write('Unexpected Error: {}\n'.format(str(e)))
+		print(0)
+		sys.exit(1)
 	
-	
+
 def checkInputs(date, f, t, bags, ret, cheapest, fastest, oneway):
+	"""Check input arguments, modify date to desired format and set default flags --one-way and --cheapest if not specified.
+
+	Throws:
+		ArgumentException: If some argument is not valid
+
+	Returns:
+		modified tuple (date, oneway, cheapest)
+	"""
 	date = next(datefinder.find_dates(date), None)
 	if not date:
-		raise Exception('Invalid date!')
+		raise ArgumentException('Invalid date!')
 	date = date.strftime('%d/%m/%Y')
 	if not (len(f) == 3 and re.match(r'[A-Z]{3}', f)):
-		raise Exception('Invalid \'from\' option format!')
+		raise ArgumentException('Invalid \'from\' option format!')
 	if not (len(t) == 3 and re.match(r'[A-Z]{3}', t)):
-		raise Exception('Invalid \'to\' option format!')		
+		raise ArgumentException('Invalid \'to\' option format!')		
 	if not oneway and not ret: oneway = True
 	if oneway and ret:
-		raise Exception('Ambiguous option one-way/return! Please specify only one.')
+		raise ArgumentException('Ambiguous option one-way/return! Please specify only one.')
 	if ret and ret < 0:
-		raise Exception('Option \'return\' cannot be negative!')		
+		raise ArgumentException('Option \'return\' cannot be negative!')		
 	if bags and bags < 0:
-		raise Exception('Option \'bags\' cannot be negative!')		
+		raise ArgumentException('Option \'bags\' cannot be negative!')		
 	if not cheapest and not fastest: cheapest = True
 	if cheapest and fastest:
-		raise Exception('Ambiguous option cheapest/fastest! Please specify only one.')	
+		raise ArgumentException('Ambiguous option cheapest/fastest! Please specify only one.')	
 
 	return date, oneway, cheapest
 
 def getFlight(date, f, t, ret, cheapest, fastest, oneway):
+	"""Get the best flight from skypicker api.
+
+	Returns:
+		the best flight or None if no flight found
+	"""
 	params = dict(
 		dateFrom = date,
 		daysInDestinationFrom = ret if ret else None,
@@ -71,6 +102,11 @@ def getFlight(date, f, t, ret, cheapest, fastest, oneway):
 	return data['data'][0] if data['data'] else None
 
 def bookFlight(flight, bags):
+	"""Books given flight.
+
+	Returns:
+		'pnr' of booked flight
+	"""
 	url = 'http://128.199.48.38:8080/booking'
 	data = {
 		'booking_token': flight['booking_token'],
@@ -82,14 +118,4 @@ def bookFlight(flight, bags):
 	return booking['pnr']
 
 if __name__ == '__main__':
-	try:
-		main()
-	except Exception as e:
-		sys.stderr.write('Error: {}\n'.format(str(e)))
-		print(0)
-		sys.exit(0)
-
-"""
-ADD SETUPTOOLS
-ADD TESTS
-"""
+	main()	
