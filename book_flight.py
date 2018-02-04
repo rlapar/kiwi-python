@@ -6,6 +6,7 @@ import sys
 import json
 import datefinder
 import requests
+from requests.exceptions import RequestException
 
 USER = {
 	'firstName': 'Chris',
@@ -19,7 +20,7 @@ USER = {
 class ArgumentException(Exception):
 	pass
 
-class FlightException(Exception):
+class NoFlightException(Exception):
 	pass
 
 @click.command()
@@ -37,15 +38,19 @@ def main(date, f, t, bags, ret, cheapest, fastest, oneway, warn):
 		date, oneway, cheapest = checkInputs(date, f, t, bags, ret, cheapest, fastest, oneway)
 		flight = getFlight(date, f, t, ret, cheapest, fastest, oneway)
 		if not flight:
-			raise FlightException('No flight found!')
+			raise NoFlightException('No flight found!')
 		bookId = bookFlight(flight, bags)
 		print(bookId)
 	except ArgumentException as e:
 		if warn: sys.stderr.write('Input Error: {}\n'.format(str(e)))
 		print(0)
 		sys.exit(1)
-	except FlightException as e:
+	except NoFlightException as e:
 		if warn: sys.stderr.write('Booking Error: {}\n'.format(str(e)))
+		print(0)
+		sys.exit(1)
+	except RequestException as e:
+		if warn: sys.stderr.write('Request Error: {}\n'.format(str(e)))
 		print(0)
 		sys.exit(1)
 	except Exception as e:
@@ -53,7 +58,6 @@ def main(date, f, t, bags, ret, cheapest, fastest, oneway, warn):
 		print(0)
 		sys.exit(1)
 	
-
 def checkInputs(date, f, t, bags, ret, cheapest, fastest, oneway):
 	"""Check input arguments, modify date to desired format and set default flags --one-way and --cheapest if not specified.
 
@@ -63,22 +67,33 @@ def checkInputs(date, f, t, bags, ret, cheapest, fastest, oneway):
 	Returns:
 		modified tuple (date, oneway, cheapest)
 	"""
+
 	date = next(datefinder.find_dates(date), None)
 	if not date:
 		raise ArgumentException('Invalid date!')
 	date = date.strftime('%d/%m/%Y')
+
 	if not (len(f) == 3 and re.match(r'[A-Z]{3}', f)):
 		raise ArgumentException('Invalid \'from\' option format!')
+
 	if not (len(t) == 3 and re.match(r'[A-Z]{3}', t)):
 		raise ArgumentException('Invalid \'to\' option format!')		
-	if not oneway and not ret: oneway = True
+
+	if not oneway and not ret: 
+		oneway = True
+
 	if oneway and ret:
 		raise ArgumentException('Ambiguous option one-way/return! Please specify only one.')
+
 	if ret and ret < 0:
 		raise ArgumentException('Option \'return\' cannot be negative!')		
+
 	if bags and bags < 0:
 		raise ArgumentException('Option \'bags\' cannot be negative!')		
-	if not cheapest and not fastest: cheapest = True
+
+	if not cheapest and not fastest: 
+		cheapest = True
+
 	if cheapest and fastest:
 		raise ArgumentException('Ambiguous option cheapest/fastest! Please specify only one.')	
 
@@ -90,16 +105,17 @@ def getFlight(date, f, t, ret, cheapest, fastest, oneway):
 	Returns:
 		the best flight or None if no flight found
 	"""
-	params = dict(
-		dateFrom = date,
-		daysInDestinationFrom = ret if ret else None,
-		flyFrom = f,
-		to = t,
-		typeFlight = 'oneway' if oneway else 'round',
-		sort = 'price' if cheapest else 'duration'
-	)
+
+	params = {
+		'dateFrom': date,
+		'daysInDestinationFrom': (ret if ret else None),
+		'flyFrom': f,
+		'to': t,
+		'typeFlight': ('oneway' if oneway else 'round'),
+		'sort': ('price' if cheapest else 'duration')
+	}
 	data = requests.get('https://api.skypicker.com/flights', params=params).json()
-	return data['data'][0] if data['data'] else None
+	return data['data'][0] if data.get('data') else None
 
 def bookFlight(flight, bags):
 	"""Books given flight.
@@ -107,10 +123,11 @@ def bookFlight(flight, bags):
 	Returns:
 		'pnr' of booked flight
 	"""
+
 	url = 'http://128.199.48.38:8080/booking'
 	data = {
 		'booking_token': flight['booking_token'],
-		'currency': next(iter(flight['conversion'])),
+		'currency': list(flight['conversion'].keys())[0],
 		'passengers': [USER],
 		'bags': bags if bags else 1
 	}
